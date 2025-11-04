@@ -1,0 +1,50 @@
+{
+  "1": {
+    "label": "Feeling peaceful inside",
+    "categories": [
+      {"name": "Mindfulness", "reason": "Teaches attention and presence to calm reactivity", "primary": true},
+      {"name": "Meditation", "reason": "Practical techniques to cultivate inner stillness", "primary": true},
+      {"name": "Spirituality", "reason": "Offers frameworks for meaning and acceptance", "primary": false}
+    ]
+  },
+  "2": {
+    "label": "Achieving my goals with less stress",
+    "categories": [
+      {"name": "Productivity", "reason": "Systems and tactics to get things done efficiently", "primary": true},
+      {"name": "Planning", "reason": "Roadmaps and prioritization to reduce overwhelm", "primary": true},
+      {"name": "Personal Development", "reason": "Mindsets and routines that sustain performance", "primary": false}
+    ]
+  },
+  "3": {
+    "label": "Discovering who I really am",
+    "categories": [
+      {"name": "Psychology", "reason": "Personality, identity, and meaning-making models", "primary": true},
+      {"name": "Personal Development", "reason": "Exercises and journaling for self-discovery", "primary": true},
+      {"name": "Philosophy", "reason": "Big questions about self, values and purpose", "primary": false}
+    ]
+  },
+  "4": {
+    "label": "Being a better friend/partner/parent",
+    "categories": [
+      {"name": "Relationships", "reason": "Communication, boundaries and attachment insights", "primary": true},
+      {"name": "Parenting", "reason": "Age-appropriate strategies and empathy for caregivers", "primary": true},
+      {"name": "Communication", "reason": "Practical conversation and conflict tools", "primary": true}
+    ]
+  },
+  "5": {
+    "label": "Finding direction and purpose",
+    "categories": [
+      {"name": "Purpose & Values", "reason": "Exercises to identify core aims and non-negotiables", "primary": true},
+      {"name": "Philosophy", "reason": "Frameworks for meaning and life-direction", "primary": true},
+      {"name": "Personal Development", "reason": "Actionable steps to move from insight to life change", "primary": false}
+    ]
+  },
+  "6": {
+    "label": "Making better life choices",
+    "categories": [
+      {"name": "Planning", "reason": "Decision frameworks and scenario planning", "primary": true},
+      {"name": "Personal Development", "reason": "Cognitive tools and habit design for better decisions", "primary": true},
+      {"name": "Psychology", "reason": "Biases and heuristics that distort choices", "primary": false}
+    ]
+  }
+}

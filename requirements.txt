@@ -1,0 +1,6 @@
+supabase
+google-genai
+python-dotenv
+tenacity
+streamlit
+

@@ -1,0 +1,51 @@
+[
+  {
+    "question": "How would you relate the following with yourself?",
+    "type": "multiple_choice",
+    "options": "{\"1\":\"I focus on logic, analysis, and planning\",\"2\":\"I'm driven by values, emotion, and do what's right\",\"3\":\"I concentrate on details, facts, and believe in practicality\",\"4\":\"I love exploring new ideas and envision future possibilities\"}",
+    "images": "",
+    "id": "16362ada-5e12-4e25-830f-313bdf7ec67f",
+    "sequence": 7
+  },
+  {
+    "question": "How much time do you want to spend daily on yourself?",
+    "type": "multiple_choice",
+    "options": "{\"1\":\"5 min – Quick insight & reflection\",\"2\":\"10 min – A daily story + learning\",\"3\":\"15+ min – Deep dive into wisdom\"}",
+    "images": "",
+    "id": "16e81b12-f4ea-4c2d-ace5-99507b93a60a",
+    "sequence": 8
+  },
+  {
+    "question": "What is your age group?",
+    "type": "single_choice",
+    "options": "{\"1\":\"16-25 years\",\"2\":\"26-35 years\",\"3\":\"36-50 years\",\"4\":\"50+ years\"}",
+    "images": "",
+    "id": "36d3b953-8f26-410f-8c64-729e778d8766",
+    "sequence": 1
+  },
+  {
+    "question": "Choose your learning style",
+    "type": "single_choice",
+    "options": "{\"1\":\"Step by step, I like going slow and steady\",\"2\":\"Give me something exciting and powerful\",\"3\":\"I love deep thinking and reflection\",\"4\":\"Just show me what works\"}",
+    "images": "",
+    "id": "8381d20c-f85b-43ea-b72f-d5d5b5570f17",
+    "sequence": 9
+  },
+  {
+    "question": "What's your relationship status?",
+    "type": "single_choice",
+    "options": "{\"1\":\"Single\",\"2\":\"In a relationship\",\"3\":\"Married\",\"4\":\"Other\"}",
+    "images": "",
+    "id": "relationship-status-id",
+    "sequence": 2
+  },
+  {
+    "question": "What are you looking for?",
+    "type": "multiple_choice",
+    "options": "{\"1\":\"I want to feel more calm and balanced\",\"2\":\"I want to be more confident\",\"3\":\"I want to improve my relationships\",\"4\":\"I want clarity about my life or career\",\"5\":\"I want to grow and be my best self\",\"6\":\"I just love learning new things\",\"7\":\"I'm just exploring\"}",
+    "images": "",
+    "id": "f9c9f28d-33c8-4ee4-9883-0916d15d90ef",
+    "sequence": 5
+  }
+]
+
