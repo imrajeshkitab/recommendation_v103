@@ -212,54 +212,147 @@ def _safe_norm(vec: list):
     except Exception:
         return 0.0
 
+def calculate_relevance_score(query_embedding: list, item_embedding: list) -> float:
+    """Calculate relevance score using cosine similarity between query and item embeddings.
+    
+    Args:
+        query_embedding: The embedding vector of the search query
+        item_embedding: The embedding vector of the item/document
+        
+    Returns:
+        A relevance score between 0.0 and 1.0 (0% to 100% similarity)
+        Returns RELEVANCE_FALLBACK_SCORE if calculation fails
+    """
+    if not isinstance(query_embedding, (list, tuple)) or not isinstance(item_embedding, (list, tuple)):
+        logger.warning("Invalid embedding types for relevance calculation")
+        return RELEVANCE_FALLBACK_SCORE
+    
+    if not query_embedding or not item_embedding:
+        logger.warning("Empty embeddings for relevance calculation")
+        return RELEVANCE_FALLBACK_SCORE
+    
+    try:
+        # Convert to lists and ensure they're numeric
+        query_vec = [float(x) for x in query_embedding]
+        item_vec = [float(x) for x in item_embedding]
+        
+        # Guard against size mismatch by truncating to min length
+        n = min(len(query_vec), len(item_vec))
+        if n == 0:
+            logger.warning("Zero-length embeddings after conversion")
+            return RELEVANCE_FALLBACK_SCORE
+        
+        # Calculate dot product
+        dot_product = sum(query_vec[i] * item_vec[i] for i in range(n))
+        
+        # Calculate norms
+        query_norm = _safe_norm(query_vec[:n])
+        item_norm = _safe_norm(item_vec[:n])
+        
+        if query_norm == 0.0 or item_norm == 0.0:
+            logger.warning("Zero-norm vector in relevance calculation")
+            return RELEVANCE_FALLBACK_SCORE
+        
+        # Calculate cosine similarity
+        cosine_similarity = dot_product / (query_norm * item_norm)
+        
+        # Clip for numerical stability (cosine similarity should be in [-1, 1])
+        cosine_similarity = max(-1.0, min(1.0, cosine_similarity))
+        
+        # Normalize to [0, 1] range: (cos + 1) / 2
+        # This maps -1 -> 0, 0 -> 0.5, 1 -> 1.0
+        normalized_score = (cosine_similarity + 1.0) / 2.0
+        
+        logger.debug(
+            "Relevance score calculated: cosine=%.4f normalized=%.4f",
+            cosine_similarity,
+            normalized_score
+        )
+        
+        return normalized_score
+        
+    except Exception as e:
+        logger.exception("Error calculating relevance score: %s", e)
+        return RELEVANCE_FALLBACK_SCORE
+
 def compute_relevance_score(user_vec: list, item_vec: list, normalize: bool = True) -> float:
     """Compute cosine similarity between two vectors with numerical safety.
 
     Returns a score in [0,1] if normalize=True using (cos+1)/2.
     Falls back to RELEVANCE_FALLBACK_SCORE if vectors are invalid or zero-norm.
+    
+    Note: This function is kept for backward compatibility.
+    Use calculate_relevance_score() for new code.
     """
-    if not isinstance(user_vec, (list, tuple)) or not isinstance(item_vec, (list, tuple)):
-        return RELEVANCE_FALLBACK_SCORE
-    if not user_vec or not item_vec:
-        return RELEVANCE_FALLBACK_SCORE
-
-    try:
-        # Guard against size mismatch by truncating to min length
-        n = min(len(user_vec), len(item_vec))
-        if n == 0:
-            return RELEVANCE_FALLBACK_SCORE
-        dot = 0.0
-        for i in range(n):
-            dot += float(user_vec[i]) * float(item_vec[i])
-        norm_u = _safe_norm(user_vec[:n])
-        norm_v = _safe_norm(item_vec[:n])
-        if norm_u == 0.0 or norm_v == 0.0:
-            return RELEVANCE_FALLBACK_SCORE
-        cos = dot / (norm_u * norm_v)
-        # Clip for numerical stability
-        if cos > 1.0:
-            cos = 1.0
-        elif cos < -1.0:
-            cos = -1.0
-        return (cos + 1.0) / 2.0 if normalize else cos
-    except Exception:
-        return RELEVANCE_FALLBACK_SCORE
+    return calculate_relevance_score(user_vec, item_vec)
 
 def _extract_item_embedding_from_result(result: dict):
     """Try to extract an item embedding from a result.
 
     Many backends do not include raw vectors in search responses. If absent, return None.
     Tries common locations like result['embedding'] or result['metadata']['embedding'].
+    Also handles string-encoded embeddings that need to be parsed.
     """
     if not isinstance(result, dict):
         return None
-    if 'embedding' in result and isinstance(result['embedding'], (list, tuple)):
-        return result['embedding']
+    
+    # Try direct embedding field
+    if 'embedding' in result:
+        emb = result['embedding']
+        if isinstance(emb, (list, tuple)):
+            return list(emb)
+        elif isinstance(emb, str):
+            # Try to parse string representation
+            try:
+                import ast
+                parsed = ast.literal_eval(emb)
+                if isinstance(parsed, (list, tuple)):
+                    return list(parsed)
+            except:
+                pass
+    
+    # Try embeddings field (plural)
+    if 'embeddings' in result:
+        emb = result['embeddings']
+        if isinstance(emb, (list, tuple)):
+            return list(emb)
+        elif isinstance(emb, str):
+            try:
+                import ast
+                parsed = ast.literal_eval(emb)
+                if isinstance(parsed, (list, tuple)):
+                    return list(parsed)
+            except:
+                pass
+    
+    # Try metadata.embedding
     metadata = result.get('metadata') or {}
     if isinstance(metadata, dict):
         emb = metadata.get('embedding')
         if isinstance(emb, (list, tuple)):
-            return emb
+            return list(emb)
+        elif isinstance(emb, str):
+            try:
+                import ast
+                parsed = ast.literal_eval(emb)
+                if isinstance(parsed, (list, tuple)):
+                    return list(parsed)
+            except:
+                pass
+        
+        # Try metadata.embeddings
+        emb = metadata.get('embeddings')
+        if isinstance(emb, (list, tuple)):
+            return list(emb)
+        elif isinstance(emb, str):
+            try:
+                import ast
+                parsed = ast.literal_eval(emb)
+                if isinstance(parsed, (list, tuple)):
+                    return list(parsed)
+            except:
+                pass
+    
     return None
 
 def _extract_similarity_from_result(result: dict):
@@ -287,38 +380,64 @@ def _extract_similarity_from_result(result: dict):
                 return None
     return None
 
-def search_documents(supabase: Client, query_embedding: list):
+def fetch_embedding_from_supabase(supabase: Client, summary_id: str) -> list:
+    """Fetch embedding from Supabase for a given summary ID"""
+    try:
+        response = (
+            supabase.table("recommendations")
+            .select("embeddings")
+            .eq("entity_id", summary_id)
+            .eq("entity_type", "summary")
+            .execute()
+        )
+        
+        if response.data and len(response.data) > 0:
+            embeddings_str = response.data[0].get("embeddings")
+            if embeddings_str:
+                if isinstance(embeddings_str, (list, tuple)):
+                    return list(embeddings_str)
+                elif isinstance(embeddings_str, str):
+                    import ast
+                    parsed = ast.literal_eval(embeddings_str)
+                    if isinstance(parsed, (list, tuple)):
+                        return list(parsed)
+        return None
+    except Exception as e:
+        logger.warning("Failed to fetch embedding from Supabase for id=%s: %s", summary_id, e)
+        return None
+
+def search_documents(supabase: Client, query_embedding: list, query_text: str):
     """Search for documents using vector similarity"""
     try:
         logger.info(
-            "Calling RPC 'match_documents' with threshold=%.2f count=%d",
-            0.6,
+            "Calling RPC 'hybrid_search' with count=%d",
             10
         )
         response = supabase.rpc(
-            "match_documents",
+            "hybrid_search",
             {
+                "query_text": query_text,
                 "query_embedding": query_embedding,
-                "match_threshold": 0.6,
+                # "match_threshold": 0.6,
                 "match_count": 10
             }
         ).execute()
         data = response.data if getattr(response, "data", None) else []
         count = len(data) if isinstance(data, list) else (1 if data else 0)
         if count == 0:
-            logger.warning("RPC 'match_documents' returned no results")
+            logger.warning("RPC 'hybrid_search' returned no results")
         else:
-            logger.info("RPC 'match_documents' returned %d results", count)
+            logger.info("RPC 'hybrid_search' returned %d results", count)
         return data if data else []
     except Exception as e:
         logger.exception("Error searching documents: %s", e)
         st.error(f"Error searching documents: {str(e)}")
         return []
 
-def find_similar_books(title: str, author: str):
+def find_similar_books(title: str, author: str, category: str):
     """Find similar books based on title and author"""
     # Create search query from title and author
-    search_query = f"{title} {author}"
+    search_query = f"{title} {author} {category}"
     
     # Show loading state
     status_placeholder = st.empty()
@@ -335,7 +454,7 @@ def find_similar_books(title: str, author: str):
     
     # Search documents
     supabase = init_supabase_client()
-    results = search_documents(supabase, embedding)
+    results = search_documents(supabase, embedding, search_query)
     logger.info(
         "Similar books search: query='%s %s' results=%d",
         title,
@@ -346,42 +465,76 @@ def find_similar_books(title: str, author: str):
     # Compute/attach relevance scores and optionally sort
     if RELEVANCE_SCORING_ENABLED and results:
         fallback_count = 0
+        cosine_count = 0
+        supabase_similarity_count = 0
+        fetched_count = 0
         scored = []
+        
         for r in results:
             # Prefer backend similarity if available
             sim = _extract_similarity_from_result(r)
+            
             if sim is None:
+                # Try to extract embedding from result
                 item_vec = _extract_item_embedding_from_result(r)
+                
+                # If not in result, try to fetch from Supabase
+                if not item_vec:
+                    metadata = r.get('metadata', {})
+                    summary_id = metadata.get('id') or r.get('id')
+                    if summary_id:
+                        item_vec = fetch_embedding_from_supabase(supabase, summary_id)
+                        if item_vec:
+                            fetched_count += 1
+                            logger.debug("Fetched embedding from Supabase for id=%s", summary_id)
+                
                 if item_vec:
-                    sim = compute_relevance_score(embedding, item_vec, normalize=True)
+                    sim = calculate_relevance_score(embedding, item_vec)
+                    cosine_count += 1
                     logger.info(
-                        "Score via cosine: score=%.4f title='%s'", 
+                        "Score via cosine: score=%.4f (%.0f%%) title='%s'", 
                         sim,
+                        sim * 100,
                         (r.get('metadata') or {}).get('title', '')
                     )
                 else:
                     sim = RELEVANCE_FALLBACK_SCORE
                     fallback_count += 1
-                    logger.info(
-                        "Score via fallback: score=%.4f title='%s'",
+                    logger.warning(
+                        "Score via fallback: score=%.4f (%.0f%%) title='%s' - no embedding found",
                         sim,
+                        sim * 100,
                         (r.get('metadata') or {}).get('title', '')
                     )
             else:
+                supabase_similarity_count += 1
                 logger.info(
-                    "Score via Supabase similarity: score=%.4f title='%s'",
+                    "Score via Supabase similarity: score=%.4f (%.0f%%) title='%s'",
                     sim,
+                    sim * 100,
                     (r.get('metadata') or {}).get('title', '')
                 )
+            
             r['score'] = sim
             scored.append(r)
+        
         # Sort by score desc; maintain stable order for ties
         scored = sorted(scored, key=lambda x: x.get('score', RELEVANCE_FALLBACK_SCORE), reverse=True)
+        
+        logger.info(
+            "Scoring summary (similar_books): supabase=%d cosine=%d fetched=%d fallback=%d total=%d",
+            supabase_similarity_count,
+            cosine_count,
+            fetched_count,
+            fallback_count,
+            len(scored)
+        )
+        
         if RELEVANCE_SHOW_DEBUG:
             try:
                 values = [x.get('score', RELEVANCE_FALLBACK_SCORE) for x in scored]
                 if values:
-                    st.info(f"Relevance – min: {min(values):.3f}, mean: {sum(values)/len(values):.3f}, max: {max(values):.3f}, fallbacks: {fallback_count}/{len(values)}")
+                    st.info(f"Relevance – min: {min(values)*100:.1f}%, mean: {sum(values)/len(values)*100:.1f}%, max: {max(values)*100:.1f}%, fallbacks: {fallback_count}/{len(values)}")
                     logger.info(
                         "Relevance stats: min=%.3f mean=%.3f max=%.3f fallbacks=%d/%d",
                         min(values),
@@ -800,7 +953,7 @@ def process_responses():
     # Search documents
     status_placeholder.info("🔍 Searching through our library...")
     supabase = init_supabase_client()
-    results = search_documents(supabase, embedding)
+    results = search_documents(supabase, embedding, combined_query)
     
     status_placeholder.empty()
     
@@ -816,51 +969,74 @@ def process_responses():
         supabase_similarity_count = 0
         cosine_count = 0
         fallback_count = 0
+        fetched_count = 0
         scored = []
+        
         for r in results:
             # Prefer backend similarity if available
             sim = _extract_similarity_from_result(r)
+            
             if sim is None:
+                # Try to extract embedding from result
                 item_vec = _extract_item_embedding_from_result(r)
+                
+                # If not in result, try to fetch from Supabase
+                if not item_vec:
+                    metadata = r.get('metadata', {})
+                    summary_id = metadata.get('id') or r.get('id')
+                    if summary_id:
+                        item_vec = fetch_embedding_from_supabase(supabase, summary_id)
+                        if item_vec:
+                            fetched_count += 1
+                            logger.debug("Fetched embedding from Supabase for id=%s", summary_id)
+                
                 if item_vec:
-                    sim = compute_relevance_score(embedding, item_vec, normalize=True)
+                    sim = calculate_relevance_score(embedding, item_vec)
                     cosine_count += 1
                     logger.info(
-                        "Score via cosine (questionnaire): score=%.4f title='%s'",
+                        "Score via cosine (questionnaire): score=%.4f (%.0f%%) title='%s'",
                         sim,
+                        sim * 100,
                         (r.get('metadata') or {}).get('title', '')
                     )
                 else:
                     sim = RELEVANCE_FALLBACK_SCORE
                     fallback_count += 1
-                    logger.info(
-                        "Score via fallback (questionnaire): score=%.4f title='%s'",
+                    logger.warning(
+                        "Score via fallback (questionnaire): score=%.4f (%.0f%%) title='%s' - no embedding found",
                         sim,
+                        sim * 100,
                         (r.get('metadata') or {}).get('title', '')
                     )
             else:
                 supabase_similarity_count += 1
                 logger.info(
-                    "Score via Supabase similarity (questionnaire): score=%.4f title='%s'",
+                    "Score via Supabase similarity (questionnaire): score=%.4f (%.0f%%) title='%s'",
                     sim,
+                    sim * 100,
                     (r.get('metadata') or {}).get('title', '')
                 )
+            
             r['score'] = sim
             scored.append(r)
+        
         # Sort by score desc; maintain stable order for ties
         scored = sorted(scored, key=lambda x: x.get('score', RELEVANCE_FALLBACK_SCORE), reverse=True)
+        
         logger.info(
-            "Scoring summary (questionnaire): supabase=%d cosine=%d fallback=%d total=%d",
+            "Scoring summary (questionnaire): supabase=%d cosine=%d fetched=%d fallback=%d total=%d",
             supabase_similarity_count,
             cosine_count,
+            fetched_count,
             fallback_count,
             len(scored)
         )
+        
         if RELEVANCE_SHOW_DEBUG:
             try:
                 values = [x.get('score', RELEVANCE_FALLBACK_SCORE) for x in scored]
                 if values:
-                    st.info(f"Relevance – min: {min(values):.3f}, mean: {sum(values)/len(values):.3f}, max: {max(values):.3f}, fallbacks: {fallback_count}/{len(values)}")
+                    st.info(f"Relevance – min: {min(values)*100:.1f}%, mean: {sum(values)/len(values)*100:.1f}%, max: {max(values)*100:.1f}%, fallbacks: {fallback_count}/{len(values)}")
             except Exception:
                 pass
         results = scored
@@ -895,6 +1071,7 @@ def show_results():
             author = metadata.get('author', 'Unknown Author')
             tagline = metadata.get('tagline', '')
             cover_page = metadata.get('cover_page', '')
+            category = metadata.get('category', '')
             
             # Create card layout with smaller image column
             col1, col2 = st.columns([1, 3])
@@ -924,12 +1101,16 @@ def show_results():
                 safe_title = html.escape(title)
                 safe_author = html.escape(author)
                 safe_tagline = html.escape(tagline)
-                # Always show score if present
+                # Always show score if present (0-100%)
                 score_html = ""
                 try:
                     if 'score' in result:
-                        pct = max(0.0, min(1.0, float(result['score']))) * 100.0
-                        score_html = f"<div style='color:#6B7280; font-size: 0.9rem;'>Relevance: {pct:.0f}%</div>"
+                        score = float(result['score'])
+                        # Ensure score is between 0 and 1, then convert to 0-100%
+                        score = max(0.0, min(1.0, score))
+                        # Convert to percentage (0-100%)
+                        pct = score * 100.0
+                        score_html = f"<div style='color:#6B7280; font-size: 0.9rem; margin-top: 0.5rem;'>Relevance: {pct:.0f}%</div>"
                 except Exception:
                     score_html = ""
 
@@ -951,7 +1132,7 @@ def show_results():
                         'tagline': tagline,
                         'cover_page': cover_page
                     }
-                    similar_books = find_similar_books(title, author)
+                    similar_books = find_similar_books(title, author, category)
                     st.session_state.similar_books_results = similar_books
                     st.session_state.app_state = "similar_books"
                     st.rerun()
@@ -1036,7 +1217,7 @@ def show_similar_books():
                 author = metadata.get('author', 'Unknown Author')
                 tagline = metadata.get('tagline', '')
                 cover_page = metadata.get('cover_page', '')
-                
+                category = metadata.get('category', '')
                 # Create card layout
                 col1, col2 = st.columns([1, 3])
                 
@@ -1063,12 +1244,16 @@ def show_similar_books():
                     safe_title = html.escape(title)
                     safe_author = html.escape(author)
                     safe_tagline = html.escape(tagline)
-                    # Always show score if present
+                    # Always show score if present (0-100%)
                     score_html = ""
                     try:
                         if 'score' in result:
-                            pct = max(0.0, min(1.0, float(result['score']))) * 100.0
-                            score_html = f"<div style='color:#6B7280; font-size: 0.9rem;'>Relevance: {pct:.0f}%</div>"
+                            score = float(result['score'])
+                            # Ensure score is between 0 and 1, then convert to 0-100%
+                            score = max(0.0, min(1.0, score))
+                            # Convert to percentage (0-100%)
+                            pct = score * 100.0
+                            score_html = f"<div style='color:#6B7280; font-size: 0.9rem; margin-top: 0.5rem;'>Relevance: {pct:.0f}%</div>"
                     except Exception:
                         score_html = ""
 
@@ -1089,7 +1274,7 @@ def show_similar_books():
                             'tagline': tagline,
                             'cover_page': cover_page
                         }
-                        similar_books_new = find_similar_books(title, author)
+                        similar_books_new = find_similar_books(title, author, category)
                         st.session_state.similar_books_results = similar_books_new
                         st.rerun()
                 
