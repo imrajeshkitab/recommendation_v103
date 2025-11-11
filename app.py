@@ -9,6 +9,7 @@ import base64
 import csv
 import logging
 from pathlib import Path
+from optimize_image_ur import optimize_image_url
 
 # Page configuration
 st.set_page_config(
@@ -723,7 +724,11 @@ def show_questions_flow():
                 # Display image in a smaller size (1/3 of container width)
                 image_col1, image_col2, image_col3 = st.columns([1, 1, 1])
                 with image_col2:
-                    st.image(image_url, width=250, caption=selected_option)
+                    st.image(
+                        optimize_image_url(image_url, width=250),
+                        width=250,
+                        caption=selected_option
+                    )
     
     elif question_type == "multiple_choice":
         # Checkboxes for multiple choice
@@ -1081,7 +1086,7 @@ def show_results():
                     try:
                         # Display image at 1/3 size by using width constraint
                         st.image(
-                            cover_page, 
+                            optimize_image_url(cover_page, width=200), 
                             width=200,
                             caption=f"{title} cover"
                         )
@@ -1170,7 +1175,7 @@ def show_similar_books():
         if selected_book.get('cover_page'):
             try:
                 st.image(
-                    selected_book['cover_page'],
+                    optimize_image_url(selected_book['cover_page'], width=200),
                     width=200,
                     caption=f"{selected_book['title']} cover"
                 )
@@ -1225,7 +1230,7 @@ def show_similar_books():
                     if cover_page:
                         try:
                             st.image(
-                                cover_page,
+                                optimize_image_url(cover_page, width=200),
                                 width=200,
                                 caption=f"{title} cover"
                             )
