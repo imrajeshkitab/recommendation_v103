@@ -9,7 +9,9 @@ import base64
 import csv
 import logging
 from pathlib import Path
-from optimize_image_ur import optimize_image_url
+import os
+from dotenv import load_dotenv
+from app_modules.optimize_image_ur import optimize_image_url
 
 # Page configuration
 st.set_page_config(
@@ -103,11 +105,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Supabase configuration
-SUPABASE_URL = "https://kijxqpprmvywetklzhbg.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpanhxcHBybXZ5d2V0a2x6aGJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg4Njk4NjMsImV4cCI6MjA3NDQ0NTg2M30.d6eKlbz3s3KaqbMbxYceUBUFep3VehNZKEOe0ayPF2I"
+load_dotenv()
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY") or os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_SERVICE_KEY")
 
 # Google Genai configuration
-GENAI_API_KEY = "AIzaSyBRpwUO7Y5aLqHUUBMWijdZx2SShFYEaUo"
+GENAI_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GENAI_API_KEY")
+
+if not SUPABASE_URL or not SUPABASE_KEY or not GENAI_API_KEY:
+    st.warning("Missing env vars SUPABASE_URL, SUPABASE_ANON_KEY/KEY, or GOOGLE_API_KEY.")
 
 # Relevance scoring configuration
 # Toggle scoring/ranking, fallback score when missing data, and debug metrics rendering
