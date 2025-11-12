@@ -1476,5 +1476,236 @@
             }
         });
     </script>
+    <script>
+        // Inject styles for eye button and audience modal
+        (function injectAudienceStyles() {
+            const style = document.createElement('style');
+            style.textContent = `
+                .rec-eye-button { 
+                    margin-left: 8px; 
+                    display: inline-flex; 
+                    align-items: center; 
+                    justify-content: center; 
+                    width: 22px; 
+                    height: 22px; 
+                    border-radius: 999px; 
+                    border: none; 
+                    background: transparent; 
+                    color: #667eea; 
+                    cursor: pointer; 
+                    vertical-align: middle;
+                }
+                .rec-eye-button:hover { 
+                    color: #5a67d8; 
+                    background: rgba(102, 126, 234, 0.12); 
+                }
+                .rec-eye-button:focus-visible { 
+                    outline: 2px solid #667eea; 
+                    outline-offset: 2px; 
+                }
+
+                .audience-backdrop {
+                    position: fixed;
+                    inset: 0;
+                    background: rgba(0, 0, 0, 0.4);
+                    display: none;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 1000;
+                }
+                .audience-modal {
+                    background: #fff;
+                    max-width: 800px;
+                    width: 92%;
+                    border-radius: 12px;
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+                }
+                .audience-modal-header {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    padding: 16px 20px;
+                    border-bottom: 1px solid #eee;
+                }
+                .audience-modal-title {
+                    font-weight: 600;
+                    font-size: 18px;
+                    color: #333;
+                }
+                .audience-modal-close {
+                    background: none;
+                    border: none;
+                    font-size: 24px;
+                    cursor: pointer;
+                    line-height: 1;
+                    color: #666;
+                }
+                .audience-modal-close:hover { color: #000; }
+                .audience-modal-content {
+                    padding: 16px 20px;
+                    color: #333;
+                    white-space: pre-wrap;
+                }
+            `;
+            document.head.appendChild(style);
+        })();
+
+        // Minimal CSV parser that handles quoted fields and commas within quotes
+        function parseCSV(text) {
+            const rows = [];
+            let row = [], cell = '';
+            let inQuotes = false;
+            for (let i = 0; i < text.length; i++) {
+                const ch = text[i];
+                if (ch === '"') {
+                    const next = text[i + 1];
+                    if (inQuotes && next === '"') { // Escaped quote
+                        cell += '"';
+                        i++;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                } else if (ch === ',' && !inQuotes) {
+                    row.push(cell);
+                    cell = '';
+                } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+                    if (ch === '\r' && text[i + 1] === '\n') {
+                        // CRLF, skip the next \n
+                    }
+                    row.push(cell);
+                    rows.push(row);
+                    row = [];
+                    cell = '';
+                    // If CRLF, the loop will handle advancing on next iteration
+                } else {
+                    cell += ch;
+                }
+            }
+            // Flush last cell/row if needed
+            if (cell.length > 0 || row.length > 0) {
+                row.push(cell);
+                rows.push(row);
+            }
+            return rows;
+        }
+
+        async function loadAudienceMap() {
+            try {
+                const resp = await fetch('media/title_identifier_map.csv', { cache: 'no-store' });
+                const text = await resp.text();
+                const rows = parseCSV(text);
+                if (!rows.length) return {};
+                const headers = rows[0].map(h => h.trim());
+                const idxTitle = headers.indexOf('title');
+                const idxAudience = headers.indexOf('target_audiance');
+                const map = {};
+                for (let r = 1; r < rows.length; r++) {
+                    const row = rows[r];
+                    const title = (row[idxTitle] || '').trim();
+                    const audience = (row[idxAudience] || '').trim();
+                    if (title) map[title] = audience;
+                }
+                return map;
+            } catch (e) {
+                console.error('Failed to load audience CSV:', e);
+                return {};
+            }
+        }
+
+        // Lightweight, safe Markdown renderer for our CSV content
+        function renderMarkdownSafe(text) {
+            if (!text) return '';
+            // Normalize newlines
+            text = String(text).replace(/\r\n/g, '\n');
+            // Escape HTML first
+            const escaped = text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+            // Basic markdown: bold **text**, inline code `code`
+            let html = escaped
+                .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                .replace(/`([^`]+)`/g, '<code>$1</code>');
+            // Line breaks
+            html = html.replace(/\n\n+/g, '\n<br><br>\n');
+            html = html.replace(/\n/g, '<br>');
+            return html;
+        }
+
+        // Modal helpers
+        function createAudienceModal() {
+            const backdrop = document.createElement('div');
+            backdrop.className = 'audience-backdrop';
+            backdrop.innerHTML = `
+                <div class="audience-modal" role="dialog" aria-modal="true" aria-labelledby="audience-modal-title">
+                    <div class="audience-modal-header">
+                        <div id="audience-modal-title" class="audience-modal-title"></div>
+                        <button class="audience-modal-close" aria-label="Close">×</button>
+                    </div>
+                    <div class="audience-modal-content"></div>
+                </div>
+            `;
+            document.body.appendChild(backdrop);
+            const modal = backdrop.querySelector('.audience-modal');
+            const titleEl = backdrop.querySelector('.audience-modal-title');
+            const contentEl = backdrop.querySelector('.audience-modal-content');
+            const closeBtn = backdrop.querySelector('.audience-modal-close');
+
+            function open(title, text) {
+                titleEl.textContent = title;
+                // Render markdown safely from CSV content
+                const rendered = renderMarkdownSafe(text || 'Audience info not available.');
+                contentEl.innerHTML = rendered;
+                backdrop.style.display = 'flex';
+                document.body.style.overflow = 'hidden';
+                closeBtn.focus();
+            }
+            function close() {
+                backdrop.style.display = 'none';
+                document.body.style.overflow = '';
+            }
+            backdrop.addEventListener('click', (e) => {
+                if (e.target === backdrop) close();
+            });
+            closeBtn.addEventListener('click', close);
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && backdrop.style.display === 'flex') {
+                    close();
+                }
+            });
+
+            return { open, close };
+        }
+
+        // Initialize on DOM ready
+        document.addEventListener('DOMContentLoaded', async () => {
+            const audienceMap = await loadAudienceMap();
+            const modal = createAudienceModal();
+
+            // Add eye buttons next to each recommendation title
+            const titleEls = document.querySelectorAll('.recommendations-list .rec-item .rec-title');
+            titleEls.forEach((titleEl) => {
+                const title = titleEl.textContent.trim();
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'rec-eye-button';
+                btn.title = 'View target audience';
+                btn.setAttribute('aria-label', `View target audience for ${title}`);
+                btn.innerHTML = `
+                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                        <path fill="currentColor" d="M12 5c-7 0-11 7-11 7s4 7 11 7 11-7 11-7-4-7-11-7zm0 12c-2.757 0-5-2.243-5-5s2.243-5 5-5 5 2.243 5 5-2.243 5-5 5zm0-8a3 3 0 100 6 3 3 0 000-6z"/>
+                    </svg>
+                `;
+                btn.addEventListener('click', () => {
+                    const text = audienceMap[title];
+                    modal.open(title, text);
+                });
+                // Insert right after the title span, before the score
+                titleEl.insertAdjacentElement('afterend', btn);
+            });
+        });
+    </script>
 </body>
 </html>

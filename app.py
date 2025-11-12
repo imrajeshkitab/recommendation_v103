@@ -9,9 +9,10 @@ import base64
 import csv
 import logging
 from pathlib import Path
-import os
-from dotenv import load_dotenv
-from app_modules.optimize_image_ur import optimize_image_url
+from typing import Optional
+
+from app_modules.query_builder import build_search_query
+from app_modules.search_service import search_bytes, search_summaries
 
 # Page configuration
 st.set_page_config(
@@ -24,46 +25,84 @@ st.set_page_config(
 # Custom CSS for white and light purple theme
 st.markdown("""
     <style>
-    .main {
-        background-color: #FFFFFF;
-    }
-    .stApp {
-        background-color: #FFFFFF;
+    .main, .stApp {
+        background-color: #F9FAFF;
     }
     .question-card {
-        background-color: #F8F4FF;
-        padding: 2rem;
-        border-radius: 15px;
-        border: 2px solid #E6D7FF;
-        margin: 1rem 0;
-        box-shadow: 0 4px 6px rgba(230, 215, 255, 0.2);
+        background: linear-gradient(135deg, #F8F4FF 0%, #F0ECFF 100%);
+        padding: 2.2rem;
+        border-radius: 20px;
+        border: 1px solid rgba(124, 58, 237, 0.12);
+        margin: 1.1rem 0;
+        box-shadow: 0 22px 46px rgba(124, 58, 237, 0.12);
+    }
+    .card-inner {
+        background: #FFFFFF;
+        border-radius: 18px;
+        padding: 1.05rem 1.1rem 1.15rem;
+        border: 1px solid rgba(124, 58, 237, 0.12);
+        box-shadow: 0 14px 28px rgba(99, 102, 241, 0.12);
+        transition: transform 0.25s ease, box-shadow 0.25s ease;
+        width: 100%;
+    }
+    .card-inner:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 26px 48px rgba(99, 102, 241, 0.18);
     }
     .result-card {
-        background: linear-gradient(135deg, #F8F4FF 0%, #E6D7FF 100%);
-        padding: 1.5rem;
-        border-radius: 12px;
-        border: 2px solid #D4BFFF;
-        margin: 1rem 0;
-        box-shadow: 0 4px 6px rgba(139, 92, 246, 0.2);
-        transition: transform 0.2s;
+        background: linear-gradient(135deg, rgba(248, 244, 255, 0.9) 0%, rgba(226, 217, 255, 0.98) 100%);
+        padding: 1.15rem 1.05rem 1.2rem;
+        border-radius: 16px;
+        border: 1px solid rgba(139, 92, 246, 0.18);
+        margin: 0.45rem auto 0;
+        width: calc(100% - 0.3rem);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+        text-align: left;
+        transition: transform 0.25s ease, box-shadow 0.25s ease;
     }
     .result-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 12px rgba(139, 92, 246, 0.3);
-        background: linear-gradient(135deg, #F3EBFF 0%, #D4BFFF 100%);
+        transform: translateY(-3px) scale(1.01);
+        box-shadow: 0 20px 36px rgba(124, 58, 237, 0.18);
+        background: linear-gradient(135deg, rgba(248, 244, 255, 0.98) 0%, rgba(208, 196, 255, 1) 100%);
+    }
+    .detail-card {
+        background: linear-gradient(135deg, #FFFFFF 0%, #F3F1FF 100%);
+        padding: 1.6rem;
+        border-radius: 22px;
+        border: 1px solid rgba(124, 58, 237, 0.14);
+        box-shadow: 0 28px 52px rgba(124, 58, 237, 0.15);
+        margin: 0.6rem 0 1.1rem;
+        width: 95%;
+    }
+    .description-box {
+        background: #FFFFFF;
+        border-radius: 20px;
+        border: 1px solid rgba(148, 163, 184, 0.24);
+        padding: 1.2rem 1.5rem;
+        box-shadow: 0 24px 40px rgba(15, 23, 42, 0.08);
+        margin-top: 0.9rem;
+        line-height: 1.55;
+        color: #374151;
     }
     .book-title {
-        color: #6D28D9 !important;
-        margin-bottom: 0.5rem;
+        color: #5B21B6 !important;
+        margin-bottom: 0.35rem;
+        font-size: 1rem !important;
+        font-weight: 650;
+        line-height: 1.22;
     }
     .book-author {
         color: #7C3AED !important;
         font-style: italic;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0;
+        font-size: 0.95rem !important;
+        line-height: 1.18;
     }
-    .book-tagline {
-        color: #5B21B6 !important;
-        line-height: 1.6;
+    .meta-label {
+        color: #4C1D95;
+        font-weight: 600;
+        font-size: 0.85rem;
+        letter-spacing: 0.01em;
     }
     .logo-container {
         float: left;
@@ -76,44 +115,48 @@ st.markdown("""
         margin-bottom: 1rem;
     }
     .progress-bar {
-        background-color: #E6D7FF;
-        border-radius: 10px;
-        padding: 0.5rem;
-        margin: 1rem 0;
+        background-color: rgba(124, 58, 237, 0.12);
+        border-radius: 14px;
+        padding: 0.6rem;
+        margin: 1.1rem 0;
     }
     h1 {
-        color: #8B5CF6;
-    }
-    h2 {
-        color: #7C3AED;
-    }
-    h3 {
         color: #6D28D9;
     }
+    h2 {
+        color: #5B21B6;
+    }
+    h3 {
+        color: #4C1D95;
+    }
+    .stProgress .st-bo {
+        background: linear-gradient(135deg, #8B5CF6, #6366F1);
+        box-shadow: 0 6px 14px rgba(99, 102, 241, 0.25);
+    }
     .stButton>button {
-        background-color: #8B5CF6;
+        background: linear-gradient(135deg, #8B5CF6, #6366F1);
         color: white;
-        border-radius: 8px;
+        border-radius: 28px;
         border: none;
-        padding: 0.5rem 2rem;
+        padding: 0.55rem 1.8rem;
         font-weight: 600;
+        box-shadow: 0 14px 28px rgba(99, 102, 241, 0.24);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
     .stButton>button:hover {
-        background-color: #7C3AED;
+        background: linear-gradient(135deg, #7C3AED, #4C1D95);
+        box-shadow: 0 20px 36px rgba(76, 29, 149, 0.3);
+        transform: translateY(-2px);
     }
     </style>
 """, unsafe_allow_html=True)
 
 # Supabase configuration
-load_dotenv()
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY") or os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_SERVICE_KEY")
+SUPABASE_URL = "https://kijxqpprmvywetklzhbg.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpanhxcHBybXZ5d2V0a2x6aGJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg4Njk4NjMsImV4cCI6MjA3NDQ0NTg2M30.d6eKlbz3s3KaqbMbxYceUBUFep3VehNZKEOe0ayPF2I"
 
 # Google Genai configuration
-GENAI_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GENAI_API_KEY")
-
-if not SUPABASE_URL or not SUPABASE_KEY or not GENAI_API_KEY:
-    st.warning("Missing env vars SUPABASE_URL, SUPABASE_ANON_KEY/KEY, or GOOGLE_API_KEY.")
+GENAI_API_KEY = "AIzaSyCKgK59CFtxfmmQm-92p7mvxiX_qumgrb8"
 
 # Relevance scoring configuration
 # Toggle scoring/ranking, fallback score when missing data, and debug metrics rendering
@@ -139,12 +182,18 @@ if "questions" not in st.session_state:
     st.session_state.questions = []
 if "search_results" not in st.session_state:
     st.session_state.search_results = []
+if "bytes_results" not in st.session_state:
+    st.session_state.bytes_results = []
 if "app_state" not in st.session_state:
     st.session_state.app_state = "questions"  # "questions", "results", or "similar_books"
 if "selected_book" not in st.session_state:
     st.session_state.selected_book = None
 if "similar_books_results" not in st.session_state:
     st.session_state.similar_books_results = []
+if "selected_byte" not in st.session_state:
+    st.session_state.selected_byte = None
+if "similar_bytes_results" not in st.session_state:
+    st.session_state.similar_bytes_results = []
 
 def init_supabase_client():
     """Initialize and return Supabase client"""
@@ -413,33 +462,217 @@ def fetch_embedding_from_supabase(supabase: Client, summary_id: str) -> list:
         logger.warning("Failed to fetch embedding from Supabase for id=%s: %s", summary_id, e)
         return None
 
-def search_documents(supabase: Client, query_embedding: list, query_text: str):
-    """Search for documents using vector similarity"""
-    try:
-        logger.info(
-            "Calling RPC 'hybrid_search' with count=%d",
-            10
-        )
-        response = supabase.rpc(
-            "hybrid_search",
-            {
-                "query_text": query_text,
-                "query_embedding": query_embedding,
-                # "match_threshold": 0.6,
-                "match_count": 10
-            }
-        ).execute()
-        data = response.data if getattr(response, "data", None) else []
-        count = len(data) if isinstance(data, list) else (1 if data else 0)
-        if count == 0:
-            logger.warning("RPC 'hybrid_search' returned no results")
+def score_results(results: list, query_embedding: list, supabase: Client, context_label: str = "") -> list:
+    """Attach relevance scores to results and sort them."""
+    if not results or not RELEVANCE_SCORING_ENABLED:
+        return results or []
+
+    supabase_similarity_count = 0
+    cosine_count = 0
+    fallback_count = 0
+    fetched_count = 0
+    scored = []
+
+    label_suffix = f" ({context_label})" if context_label else ""
+
+    for result in results:
+        sim = _extract_similarity_from_result(result)
+
+        if sim is None:
+            item_vec = _extract_item_embedding_from_result(result)
+
+            if not item_vec:
+                metadata = result.get("metadata", {}) if isinstance(result, dict) else {}
+                summary_id = metadata.get("id") or result.get("id") if isinstance(result, dict) else None
+                if summary_id and supabase:
+                    item_vec = fetch_embedding_from_supabase(supabase, summary_id)
+                    if item_vec:
+                        fetched_count += 1
+                        logger.debug("Fetched embedding from Supabase for id=%s", summary_id)
+
+            if item_vec:
+                sim = calculate_relevance_score(query_embedding, item_vec)
+                cosine_count += 1
+                logger.info(
+                    "Score via cosine%s: score=%.4f (%.0f%%) title='%s'",
+                    label_suffix,
+                    sim,
+                    sim * 100,
+                    (result.get("metadata") or {}).get("title", "") if isinstance(result, dict) else "",
+                )
+            else:
+                sim = RELEVANCE_FALLBACK_SCORE
+                fallback_count += 1
+                logger.warning(
+                    "Score via fallback%s: score=%.4f (%.0f%%) title='%s' - no embedding found",
+                    label_suffix,
+                    sim,
+                    sim * 100,
+                    (result.get("metadata") or {}).get("title", "") if isinstance(result, dict) else "",
+                )
         else:
-            logger.info("RPC 'hybrid_search' returned %d results", count)
-        return data if data else []
-    except Exception as e:
-        logger.exception("Error searching documents: %s", e)
-        st.error(f"Error searching documents: {str(e)}")
-        return []
+            supabase_similarity_count += 1
+            logger.info(
+                "Score via Supabase similarity%s: score=%.4f (%.0f%%) title='%s'",
+                label_suffix,
+                sim,
+                sim * 100,
+                (result.get("metadata") or {}).get("title", "") if isinstance(result, dict) else "",
+            )
+
+        if isinstance(result, dict):
+            result["score"] = sim
+        scored.append(result)
+
+    scored = sorted(scored, key=lambda x: x.get("score", RELEVANCE_FALLBACK_SCORE) if isinstance(x, dict) else RELEVANCE_FALLBACK_SCORE, reverse=True)
+
+    logger.info(
+        "Scoring summary%s: supabase=%d cosine=%d fetched=%d fallback=%d total=%d",
+        label_suffix,
+        supabase_similarity_count,
+        cosine_count,
+        fetched_count,
+        fallback_count,
+        len(scored),
+    )
+
+    if RELEVANCE_SHOW_DEBUG:
+        try:
+            values = [
+                item.get("score", RELEVANCE_FALLBACK_SCORE)
+                for item in scored
+                if isinstance(item, dict)
+            ]
+            if values:
+                logger.info(
+                    "Relevance stats%s: min=%.3f mean=%.3f max=%.3f fallbacks=%d/%d",
+                    label_suffix,
+                    min(values),
+                    sum(values) / len(values),
+                    max(values),
+                    fallback_count,
+                    len(values),
+                )
+        except Exception:  # pylint: disable=broad-except
+            pass
+
+    return scored
+
+
+def render_recommendation_cards(
+    results: list,
+    key_prefix: str,
+    button_label: str = "",
+    button_callback=None,
+    empty_message: str = "",
+):
+    """Render recommendation cards in a horizontal layout."""
+    if not results:
+        if empty_message:
+            st.info(empty_message)
+        return
+
+    anchor_id = f"{key_prefix}_scroll_anchor"
+    container_block = st.container()
+    container_block.markdown(
+        f"""
+        <style>
+        #{anchor_id} + div[data-testid="stHorizontalBlock"] {{
+            display: flex;
+            gap: 1.25rem;
+            overflow-x: auto;
+            padding: 0.35rem 0 0.9rem;
+            align-items: stretch;
+        }}
+        #{anchor_id} + div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {{
+            flex: 0 0 360px;
+            min-width: 360px;
+            max-width: 360px;
+        }}
+        #{anchor_id} + div[data-testid="stHorizontalBlock"] > div[data-testid="column"] button {{
+            width: 100%;
+        }}
+        #{anchor_id} + div[data-testid="stHorizontalBlock"] > div[data-testid="column"] .card-inner {{
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.55rem;
+            width: 100%;
+        }}
+        #{anchor_id} + div[data-testid="stHorizontalBlock"] > div[data-testid="column"] .card-inner img {{
+            border-radius: 8px;
+            width: 100%;
+            height: auto;
+        }}
+        </style>
+        <span id="{anchor_id}"></span>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    columns = container_block.columns(len(results), gap="large")
+
+    for idx, column in enumerate(columns):
+        result = results[idx]
+        metadata = result.get("metadata", {}) if isinstance(result, dict) else {}
+        title = str(metadata.get("title", "Unknown Title") or "Unknown Title")
+        author = str(metadata.get("author", "Unknown Author") or "Unknown Author")
+        cover_page = metadata.get("cover_page", "")
+
+        safe_title = html.escape(title)
+        safe_author = html.escape(author)
+
+        score_html = ""
+        try:
+            if isinstance(result, dict) and "score" in result:
+                score = float(result["score"])
+                score = max(0.0, min(1.0, score))
+                score_html = (
+                    f"<div style='color:#6B7280; font-size: 0.9rem; margin-top: 0.5rem;'>"
+                    f"Relevance: {score * 100.0:.0f}%"
+                    "</div>"
+                )
+        except Exception:  # pylint: disable=broad-except
+            score_html = ""
+
+        with column:
+            st.markdown("<div class='card-inner'>", unsafe_allow_html=True)
+            if cover_page:
+                try:
+                    st.image(cover_page, use_container_width=True)
+                except Exception:  # pylint: disable=broad-except
+                    st.markdown(
+                        '<div style="background-color: #F8F4FF; padding: 1.2rem; border-radius: 8px; '
+                        'text-align: center; color: #8B5CF6;">📖<br>Cover image not available</div>',
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.markdown(
+                    '<div style="background-color: #F8F4FF; padding: 1.2rem; border-radius: 8px; '
+                    'text-align: center; color: #8B5CF6;">📖<br>No cover image</div>',
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown(
+                f"""
+                <div class="result-card" style="width: 100%;">
+                    <h2 class="book-title">{safe_title}</h2>
+                    <p class="book-author"><b>By {safe_author}</b></p>
+                    {score_html}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            if button_label and button_callback:
+                if st.button(
+                    button_label,
+                    key=f"{key_prefix}_button_{idx}",
+                    help="Find similar recommendations",
+                    width="stretch",
+                ):
+                    button_callback(result, idx)
+            st.markdown("</div>", unsafe_allow_html=True)
 
 def find_similar_books(title: str, author: str, category: str):
     """Find similar books based on title and author"""
@@ -461,7 +694,8 @@ def find_similar_books(title: str, author: str, category: str):
     
     # Search documents
     supabase = init_supabase_client()
-    results = search_documents(supabase, embedding, search_query)
+    results_raw = search_summaries(supabase, embedding, search_query)
+    results = score_results(results_raw, embedding, supabase, "similar_books")
     logger.info(
         "Similar books search: query='%s %s' results=%d",
         title,
@@ -568,13 +802,69 @@ def find_similar_books(title: str, author: str, category: str):
     
     return filtered_results[:9]  # Return up to 9 similar books
 
+def find_similar_bytes(title: str, author: str, category: str, byte_id: Optional[str]):
+    """Find similar bytes based on title, author, and category"""
+    parts = [title.strip() if title else "", author.strip() if author else "", category.strip() if category else ""]
+    search_query = " ".join(filter(None, parts)) or title or author or category or ""
+
+    status_placeholder = st.empty()
+    status_placeholder.info("🔍 Finding similar bytes...")
+
+    genai_client = init_genai_client()
+    embedding = create_embedding(genai_client, search_query)
+
+    if embedding is None:
+        status_placeholder.empty()
+        st.error("Failed to create embedding for similar bytes search.")
+        return []
+
+    supabase = init_supabase_client()
+    results_raw = search_bytes(supabase, embedding, search_query)
+    results = score_results(results_raw, embedding, supabase, "similar_bytes")
+
+    logger.info(
+        "Similar bytes search: query='%s' results=%d",
+        search_query,
+        len(results or []),
+    )
+
+    status_placeholder.empty()
+
+    filtered_results = []
+    normalized_byte_id = str(byte_id).lower() if byte_id else None
+    lower_title = title.lower() if title else None
+    lower_author = author.lower() if author else None
+
+    for result in results:
+        metadata = result.get("metadata", {}) if isinstance(result, dict) else {}
+        result_title = (metadata.get("title") or "").lower()
+        result_author = (metadata.get("author") or "").lower()
+        result_id = metadata.get("id") or (result.get("id") if isinstance(result, dict) else None)
+        normalized_result_id = str(result_id).lower() if result_id else None
+
+        if normalized_byte_id and normalized_result_id and normalized_result_id == normalized_byte_id:
+            continue
+
+        same_title = bool(lower_title and result_title and result_title == lower_title)
+        same_author = bool(lower_author and result_author and result_author == lower_author)
+
+        if same_title and (not lower_author or same_author):
+            continue
+
+        filtered_results.append(result)
+
+    return filtered_results[:9]
+
 def reset_app():
     """Reset the app to initial state"""
     st.session_state.question_index = 0
     st.session_state.user_responses = []
     st.session_state.search_results = []
+    st.session_state.bytes_results = []
     st.session_state.similar_books_results = []
     st.session_state.selected_book = None
+    st.session_state.similar_bytes_results = []
+    st.session_state.selected_byte = None
     st.session_state.app_state = "questions"
 
 def main():
@@ -624,6 +914,8 @@ def main():
         show_questions_flow()
     elif st.session_state.app_state == "similar_books":
         show_similar_books()
+    elif st.session_state.app_state == "similar_bytes":
+        show_similar_bytes()
     else:
         show_results()
 
@@ -730,11 +1022,7 @@ def show_questions_flow():
                 # Display image in a smaller size (1/3 of container width)
                 image_col1, image_col2, image_col3 = st.columns([1, 1, 1])
                 with image_col2:
-                    st.image(
-                        optimize_image_url(image_url, width=250),
-                        width=250,
-                        caption=selected_option
-                    )
+                    st.image(image_url, width=250, caption=selected_option)
     
     elif question_type == "multiple_choice":
         # Checkboxes for multiple choice
@@ -814,139 +1102,19 @@ def load_motivation_mapping():
         st.error(f"Error loading motivation mapping: {str(e)}")
         return {}
 
-def get_age_based_categories(age_group: str, has_kids: bool) -> str:
-    """Get age-based categories based on life stage"""
-    age_categories = {
-        "16-25 years": "Productivity Personal Development Motivation Communication Career & Skills Creativity",
-        "26-35 years": "Productivity Leadership Personal Development Relationships",
-        "36-50 years": "Leadership Planning Health Mindfulness & Meditation Relationships Productivity Purpose & Values",
-        "50+ years": "Health & Longevity Purpose & Values Relationships Spirituality & Philosophy Mindfulness & Meditation Nature & Wellness Creativity & Learning"
-    }
-    
-    categories = age_categories.get(age_group, "")
-    
-    # Add Parenting if user has kids (for any age group)
-    if has_kids:
-        if "Parenting" not in categories:
-            categories += " Parenting"
-        # For 50+, also add Grandparenting
-        if age_group == "50+ years" and "Grandparenting" not in categories:
-            categories += " Grandparenting"
-    
-    return categories.strip()
-
-def get_motivation_categories(motivation_keys: list, motivation_mapping: dict) -> str:
-    """Get categories from motivation selections"""
-    categories_set = set()
-    
-    for key in motivation_keys:
-        key_str = str(key)
-        if key_str in motivation_mapping:
-            motivation_data = motivation_mapping[key_str]
-            for cat in motivation_data.get("categories", []):
-                categories_set.add(cat["name"])
-    
-    return " ".join(sorted(categories_set))
-
 def process_responses():
     """Combine responses and search for recommendations"""
-    # Convert responses from option keys to readable text
     questions = st.session_state.questions
-    response_texts = []
-    
-    # Extract age group, has_kids, and motivation keys
-    age_group = None
-    has_kids = False
-    motivation_keys = []
-    
-    # Question IDs for identification
-    AGE_QUESTION_ID = "36d3b953-8f26-410f-8c64-729e778d8766"
-    KIDS_QUESTION_ID = "e81709b2-e9aa-42d6-b843-4e62cfc18f99"
-    MOTIVATION_QUESTION_ID = "d3349488-6ad2-465f-a8c0-653d4b9002f5"
-    
-    for idx, response in enumerate(st.session_state.user_responses):
-        if idx < len(questions):
-            question = questions[idx]
-            question_id = question.get('id', '')
-            question_text = question.get('question', '').lower()
-            options_json = question.get('options', '{}')
-            try:
-                options_dict = json.loads(options_json) if options_json else {}
-            except:
-                options_dict = {}
-            
-            # Extract age group
-            if question_id == AGE_QUESTION_ID or 'age group' in question_text:
-                if isinstance(response, list) and response:
-                    response_key = str(response[0])
-                else:
-                    response_key = str(response)
-                if response_key in options_dict:
-                    age_group = options_dict[response_key]
-            
-            # Extract has_kids
-            if question_id == KIDS_QUESTION_ID or 'kids' in question_text:
-                if isinstance(response, list) and response:
-                    response_key = str(response[0])
-                else:
-                    response_key = str(response)
-                if response_key in options_dict:
-                    answer_text = options_dict[response_key]
-                    has_kids = answer_text.lower() == "yes"
-            
-            # Extract motivation keys
-            if question_id == MOTIVATION_QUESTION_ID or 'motivates you' in question_text:
-                if isinstance(response, list):
-                    motivation_keys = [str(key) for key in response]
-                else:
-                    motivation_keys = [str(response)]
-            
-            # Convert responses to readable text for search query
-            if isinstance(response, list):
-                # Multiple choice - get all selected option texts
-                for key in response:
-                    if str(key) in options_dict:
-                        response_texts.append(options_dict[str(key)])
-            else:
-                # Single choice - get the selected option text
-                if str(response) in options_dict:
-                    response_texts.append(options_dict[str(response)])
-    
-    # Load motivation mapping
     motivation_mapping = load_motivation_mapping()
-    
-    # Get age-based categories
-    age_categories = ""
-    if age_group:
-        age_categories = get_age_based_categories(age_group, has_kids)
-    
-    # Get motivation-based categories
-    motivation_categories = ""
-    if motivation_keys and motivation_mapping:
-        motivation_categories = get_motivation_categories(motivation_keys, motivation_mapping)
-    
-    # Combine all components into search query
-    query_parts = []
-    if response_texts:
-        query_parts.extend(response_texts)
-    if age_categories:
-        query_parts.append(age_categories)
-    if motivation_categories:
-        query_parts.append(motivation_categories)
-    
-    # Combine all response texts into a search query
-    combined_query = " ".join(query_parts)
+    combined_query, _ = build_search_query(questions, st.session_state.user_responses, motivation_mapping)
 
-    if not combined_query.strip():
+    if not combined_query:
         st.error("Please provide at least one answer to get recommendations.")
         st.session_state.app_state = "questions"
         st.session_state.question_index = 0
         st.rerun()
         return
-
-    # Log the combined user profile query text to the terminal
-    logger.info("User profile query text: %s", combined_query)
-
+    
     # Show loading state with progress steps
     status_placeholder = st.empty()
     status_placeholder.info("📝 Combining your responses...")
@@ -967,198 +1135,107 @@ def process_responses():
     # Search documents
     status_placeholder.info("🔍 Searching through our library...")
     supabase = init_supabase_client()
-    results = search_documents(supabase, embedding, combined_query)
+    summary_results_raw = search_summaries(supabase, embedding, combined_query)
+    byte_results_raw = search_bytes(supabase, embedding, combined_query)
+    summary_results = score_results(summary_results_raw, embedding, supabase, "questionnaire_summaries")
+    byte_results = score_results(byte_results_raw, embedding, supabase, "questionnaire_bytes")
     
     status_placeholder.empty()
     
-    if not results:
+    if not summary_results and not byte_results:
         st.warning("No recommendations found. Try answering the questions differently.")
         if st.button("Start Over"):
             reset_app()
             st.rerun()
         return
     
-    # Compute/attach relevance scores and optionally sort
-    if RELEVANCE_SCORING_ENABLED and results:
-        supabase_similarity_count = 0
-        cosine_count = 0
-        fallback_count = 0
-        fetched_count = 0
-        scored = []
-        
-        for r in results:
-            # Prefer backend similarity if available
-            sim = _extract_similarity_from_result(r)
-            
-            if sim is None:
-                # Try to extract embedding from result
-                item_vec = _extract_item_embedding_from_result(r)
-                
-                # If not in result, try to fetch from Supabase
-                if not item_vec:
-                    metadata = r.get('metadata', {})
-                    summary_id = metadata.get('id') or r.get('id')
-                    if summary_id:
-                        item_vec = fetch_embedding_from_supabase(supabase, summary_id)
-                        if item_vec:
-                            fetched_count += 1
-                            logger.debug("Fetched embedding from Supabase for id=%s", summary_id)
-                
-                if item_vec:
-                    sim = calculate_relevance_score(embedding, item_vec)
-                    cosine_count += 1
-                    logger.info(
-                        "Score via cosine (questionnaire): score=%.4f (%.0f%%) title='%s'",
-                        sim,
-                        sim * 100,
-                        (r.get('metadata') or {}).get('title', '')
-                    )
-                else:
-                    sim = RELEVANCE_FALLBACK_SCORE
-                    fallback_count += 1
-                    logger.warning(
-                        "Score via fallback (questionnaire): score=%.4f (%.0f%%) title='%s' - no embedding found",
-                        sim,
-                        sim * 100,
-                        (r.get('metadata') or {}).get('title', '')
-                    )
-            else:
-                supabase_similarity_count += 1
-                logger.info(
-                    "Score via Supabase similarity (questionnaire): score=%.4f (%.0f%%) title='%s'",
-                    sim,
-                    sim * 100,
-                    (r.get('metadata') or {}).get('title', '')
-                )
-            
-            r['score'] = sim
-            scored.append(r)
-        
-        # Sort by score desc; maintain stable order for ties
-        scored = sorted(scored, key=lambda x: x.get('score', RELEVANCE_FALLBACK_SCORE), reverse=True)
-        
-        logger.info(
-            "Scoring summary (questionnaire): supabase=%d cosine=%d fetched=%d fallback=%d total=%d",
-            supabase_similarity_count,
-            cosine_count,
-            fetched_count,
-            fallback_count,
-            len(scored)
-        )
-        
-        if RELEVANCE_SHOW_DEBUG:
-            try:
-                values = [x.get('score', RELEVANCE_FALLBACK_SCORE) for x in scored]
-                if values:
-                    st.info(f"Relevance – min: {min(values)*100:.1f}%, mean: {sum(values)/len(values)*100:.1f}%, max: {max(values)*100:.1f}%, fallbacks: {fallback_count}/{len(values)}")
-            except Exception:
-                pass
-        results = scored
-
-    st.session_state.search_results = results
+    st.session_state.search_results = summary_results
+    st.session_state.bytes_results = byte_results
+    st.session_state.similar_books_results = []
+    st.session_state.selected_book = None
+    st.session_state.similar_bytes_results = []
+    st.session_state.selected_byte = None
     st.session_state.app_state = "results"
     st.rerun()
 
 def show_results():
     """Display search results in a scrollable format"""
-    results = st.session_state.search_results
+    summary_results = st.session_state.search_results
+    byte_results = st.session_state.bytes_results
     
-    if not results:
+    if not summary_results and not byte_results:
         st.info("No results to display.")
         if st.button("Start Over"):
             reset_app()
             st.rerun()
         return
-    
-    # st.header("🎉 Your Personalized Recommendations")
-    # st.markdown("---")
-    
-    # Create scrollable container
-    results_container = st.container()
-    
-    with results_container:
-        for idx, result in enumerate(results):
-            metadata = result.get('metadata', {})
-            
-            # Extract book information
-            title = metadata.get('title', 'Unknown Title')
-            author = metadata.get('author', 'Unknown Author')
-            tagline = metadata.get('tagline', '')
-            cover_page = metadata.get('cover_page', '')
-            category = metadata.get('category', '')
-            
-            # Create card layout with smaller image column
-            col1, col2 = st.columns([1, 3])
-            
-            with col1:
-                if cover_page:
-                    try:
-                        # Display image at 1/3 size by using width constraint
-                        st.image(
-                            optimize_image_url(cover_page, width=200), 
-                            width=200,
-                            caption=f"{title} cover"
-                        )
-                    except Exception:
-                        st.markdown(
-                            '<div style="background-color: #F8F4FF; padding: 2rem; border-radius: 8px; text-align: center; color: #8B5CF6;">📖<br>Cover image not available</div>',
-                            unsafe_allow_html=True
-                        )
-                else:
-                    st.markdown(
-                        '<div style="background-color: #F8F4FF; padding: 2rem; border-radius: 8px; text-align: center; color: #8B5CF6;">📖<br>No cover image</div>',
-                        unsafe_allow_html=True
-                    )
-            
-            with col2:
-                # Escape HTML to prevent XSS and formatting issues
-                safe_title = html.escape(title)
-                safe_author = html.escape(author)
-                safe_tagline = html.escape(tagline)
-                # Always show score if present (0-100%)
-                score_html = ""
-                try:
-                    if 'score' in result:
-                        score = float(result['score'])
-                        # Ensure score is between 0 and 1, then convert to 0-100%
-                        score = max(0.0, min(1.0, score))
-                        # Convert to percentage (0-100%)
-                        pct = score * 100.0
-                        score_html = f"<div style='color:#6B7280; font-size: 0.9rem; margin-top: 0.5rem;'>Relevance: {pct:.0f}%</div>"
-                except Exception:
-                    score_html = ""
 
-                st.markdown(f'''
-                    <div class="result-card">
-                        <h2 class="book-title">{safe_title}</h2>
-                        <p class="book-author"><b>By {safe_author}</b></p>
-                        <p class="book-tagline">{safe_tagline}</p>
-                        {score_html}
-                    </div>
-                ''', unsafe_allow_html=True)
-                
-                # Add button to find similar books
-                if st.button(f"🔍 Find Similar Books", key=f"similar_{idx}", use_container_width=True):
-                    # Store selected book and find similar books
-                    st.session_state.selected_book = {
-                        'title': title,
-                        'author': author,
-                        'tagline': tagline,
-                        'cover_page': cover_page
-                    }
-                    similar_books = find_similar_books(title, author, category)
-                    st.session_state.similar_books_results = similar_books
-                    st.session_state.app_state = "similar_books"
-                    st.rerun()
-            
-            if idx < len(results) - 1:
-                st.markdown("---")
-    
-    # Start Over button
+    st.subheader("Summaries")
+
+    def handle_similar_click(result, _idx):
+        metadata = result.get("metadata", {}) if isinstance(result, dict) else {}
+        title = metadata.get("title", "Unknown Title")
+        author = metadata.get("author", "Unknown Author")
+        cover_page = metadata.get("cover_page", "")
+        category = metadata.get("category", "")
+
+        st.session_state.selected_book = {
+            "title": title,
+            "author": author,
+            "cover_page": cover_page,
+        }
+        similar_books = find_similar_books(title, author, category)
+        st.session_state.similar_books_results = similar_books
+        st.session_state.app_state = "similar_books"
+        st.rerun()
+
+    render_recommendation_cards(
+        summary_results,
+        key_prefix="summary",
+        button_label="🔍 Find Similar Books",
+        button_callback=handle_similar_click,
+        empty_message="No summary recommendations available.",
+    )
+
+    st.markdown("---")
+
+    st.subheader("Bytes")
+    def handle_similar_bytes_click(result, _idx):
+        metadata = result.get("metadata", {}) if isinstance(result, dict) else {}
+        title = metadata.get("title", "Unknown Title")
+        author = metadata.get("author", "Unknown Author")
+        cover_page = metadata.get("cover_page", "")
+        category = metadata.get("category", "")
+        byte_id = metadata.get("id") or (result.get("id") if isinstance(result, dict) else None)
+
+        st.session_state.selected_byte = {
+            "title": title,
+            "author": author,
+            "cover_page": cover_page,
+            "category": category,
+            "id": byte_id,
+            "description": metadata.get("description")
+            or metadata.get("summary")
+            or metadata.get("content")
+            or metadata.get("byte_text"),
+        }
+        similar_bytes = find_similar_bytes(title, author, category, byte_id)
+        st.session_state.similar_bytes_results = similar_bytes
+        st.session_state.app_state = "similar_bytes"
+        st.rerun()
+
+    render_recommendation_cards(
+        byte_results,
+        key_prefix="bytes",
+        button_label="🔍 Find Similar Bytes",
+        button_callback=handle_similar_bytes_click,
+        empty_message="No byte-sized recommendations available.",
+    )
+
     st.markdown("<br>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        if st.button("🔄 Start Over", use_container_width=True):
+        if st.button("🔄 Start Over", width="stretch"):
             reset_app()
             st.rerun()
 
@@ -1174,136 +1251,102 @@ def show_similar_books():
             st.rerun()
         return
     
-    # Display selected book at the top
-    st.header("📖 Selected Book")
-    st.markdown("---")
-    
-    col1, col2 = st.columns([1, 3])
-    
-    with col1:
-        if selected_book.get('cover_page'):
-            try:
-                st.image(
-                    optimize_image_url(selected_book['cover_page'], width=200),
-                    width=200,
-                    caption=f"{selected_book['title']} cover"
-                )
-            except Exception:
-                st.markdown(
-                    '<div style="background-color: #F8F4FF; padding: 2rem; border-radius: 8px; text-align: center; color: #8B5CF6;">📖<br>Cover image not available</div>',
-                    unsafe_allow_html=True
-                )
-        else:
-            st.markdown(
-                '<div style="background-color: #F8F4FF; padding: 2rem; border-radius: 8px; text-align: center; color: #8B5CF6;">📖<br>No cover image</div>',
-                unsafe_allow_html=True
-            )
-    
-    with col2:
-        safe_title = html.escape(selected_book.get('title', 'Unknown Title'))
-        safe_author = html.escape(selected_book.get('author', 'Unknown Author'))
-        safe_tagline = html.escape(selected_book.get('tagline', ''))
-        st.markdown(f'''
-            <div class="result-card">
-                <h2 class="book-title">{safe_title}</h2>
-                <p class="book-author"><b>By {safe_author}</b></p>
-                <p class="book-tagline">{safe_tagline}</p>
-            </div>
-        ''', unsafe_allow_html=True)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
     # Display similar books
-    if not similar_books:
-        st.info("No similar books found.")
-    else:
-        st.header("🔍 Similar Books")
-        st.markdown("---")
-        
-        similar_container = st.container()
-        
-        with similar_container:
-            for idx, result in enumerate(similar_books):
-                metadata = result.get('metadata', {})
-                
-                # Extract book information
-                title = metadata.get('title', 'Unknown Title')
-                author = metadata.get('author', 'Unknown Author')
-                tagline = metadata.get('tagline', '')
-                cover_page = metadata.get('cover_page', '')
-                category = metadata.get('category', '')
-                # Create card layout
-                col1, col2 = st.columns([1, 3])
-                
-                with col1:
-                    if cover_page:
-                        try:
-                            st.image(
-                                optimize_image_url(cover_page, width=200),
-                                width=200,
-                                caption=f"{title} cover"
-                            )
-                        except Exception:
-                            st.markdown(
-                                '<div style="background-color: #F8F4FF; padding: 2rem; border-radius: 8px; text-align: center; color: #8B5CF6;">📖<br>Cover image not available</div>',
-                                unsafe_allow_html=True
-                            )
-                    else:
-                        st.markdown(
-                            '<div style="background-color: #F8F4FF; padding: 2rem; border-radius: 8px; text-align: center; color: #8B5CF6;">📖<br>No cover image</div>',
-                            unsafe_allow_html=True
-                        )
-                
-                with col2:
-                    safe_title = html.escape(title)
-                    safe_author = html.escape(author)
-                    safe_tagline = html.escape(tagline)
-                    # Always show score if present (0-100%)
-                    score_html = ""
-                    try:
-                        if 'score' in result:
-                            score = float(result['score'])
-                            # Ensure score is between 0 and 1, then convert to 0-100%
-                            score = max(0.0, min(1.0, score))
-                            # Convert to percentage (0-100%)
-                            pct = score * 100.0
-                            score_html = f"<div style='color:#6B7280; font-size: 0.9rem; margin-top: 0.5rem;'>Relevance: {pct:.0f}%</div>"
-                    except Exception:
-                        score_html = ""
+    st.header("🔍 Similar Books")
+    st.markdown("---")
 
-                    st.markdown(f'''
-                        <div class="result-card">
-                            <h2 class="book-title">{safe_title}</h2>
-                            <p class="book-author"><b>By {safe_author}</b></p>
-                            <p class="book-tagline">{safe_tagline}</p>
-                            {score_html}
-                        </div>
-                    ''', unsafe_allow_html=True)
-                    
-                    # Add button to find similar books for this book too
-                    if st.button(f"🔍 Find Similar", key=f"similar_similar_{idx}", use_container_width=True):
-                        st.session_state.selected_book = {
-                            'title': title,
-                            'author': author,
-                            'tagline': tagline,
-                            'cover_page': cover_page
-                        }
-                        similar_books_new = find_similar_books(title, author, category)
-                        st.session_state.similar_books_results = similar_books_new
-                        st.rerun()
-                
-                if idx < len(similar_books) - 1:
-                    st.markdown("---")
+    def handle_nested_similar_click(result, _idx):
+        metadata = result.get("metadata", {}) if isinstance(result, dict) else {}
+        title = metadata.get("title", "Unknown Title")
+        author = metadata.get("author", "Unknown Author")
+        cover_page_value = metadata.get("cover_page", "")
+        category = metadata.get("category", "")
+
+        st.session_state.selected_book = {
+            "title": title,
+            "author": author,
+            "cover_page": cover_page_value,
+        }
+        similar_books_new = find_similar_books(title, author, category)
+        st.session_state.similar_books_results = similar_books_new
+        st.rerun()
+
+    render_recommendation_cards(
+        similar_books,
+        key_prefix="similar",
+        button_label="🔍 Find Similar",
+        button_callback=handle_nested_similar_click,
+        empty_message="No similar books found.",
+    )
     
     # Navigation buttons
     st.markdown("<br>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
-        if st.button("← Back to Results", use_container_width=True):
+        if st.button("← Back to Results", width="stretch"):
             st.session_state.app_state = "results"
             st.rerun()
     with col2:
-        if st.button("🔄 Start Over", use_container_width=True):
+        if st.button("🔄 Start Over", width="stretch"):
+            reset_app()
+            st.rerun()
+    with col3:
+        pass
+
+def show_similar_bytes():
+    """Display similar bytes for a selected byte"""
+    selected_byte = st.session_state.selected_byte
+    similar_bytes = st.session_state.similar_bytes_results
+
+    if not selected_byte:
+        st.error("No byte selected.")
+        if st.button("← Back to Results"):
+            st.session_state.app_state = "results"
+            st.rerun()
+        return
+
+    st.header("🔍 Similar Bytes")
+    st.markdown("---")
+
+    def handle_nested_similar_bytes_click(result, _idx):
+        metadata = result.get("metadata", {}) if isinstance(result, dict) else {}
+        title = metadata.get("title", "Unknown Title")
+        author = metadata.get("author", "Unknown Author")
+        cover_page_value = metadata.get("cover_page", "")
+        category = metadata.get("category", "")
+        byte_id_value = metadata.get("id") or (result.get("id") if isinstance(result, dict) else None)
+
+        st.session_state.selected_byte = {
+            "title": title,
+            "author": author,
+            "cover_page": cover_page_value,
+            "category": category,
+            "id": byte_id_value,
+            "description": metadata.get("description")
+            or metadata.get("summary")
+            or metadata.get("content")
+            or metadata.get("byte_text"),
+        }
+        similar_bytes_new = find_similar_bytes(title, author, category, byte_id_value)
+        st.session_state.similar_bytes_results = similar_bytes_new
+        st.rerun()
+
+    render_recommendation_cards(
+        similar_bytes,
+        key_prefix="similar_bytes",
+        button_label="🔍 Find Similar",
+        button_callback=handle_nested_similar_bytes_click,
+        empty_message="No similar bytes found.",
+    )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col1:
+        if st.button("← Back to Results", width="stretch"):
+            st.session_state.app_state = "results"
+            st.rerun()
+    with col2:
+        if st.button("🔄 Start Over", width="stretch"):
             reset_app()
             st.rerun()
     with col3:
@@ -1311,4 +1354,3 @@ def show_similar_books():
 
 if __name__ == "__main__":
     main()
-
