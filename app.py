@@ -8,8 +8,35 @@ import json
 import base64
 import csv
 import logging
+import os
 from pathlib import Path
 from typing import Optional
+
+# Load environment variables from .env using python-dotenv if available,
+# otherwise fall back to a minimal loader.
+try:
+    from dotenv import load_dotenv  # type: ignore
+    load_dotenv()
+except Exception:
+    def _load_env_fallback():
+        env_path = Path('.env')
+        if not env_path.exists():
+            return
+        for line in env_path.read_text(encoding='utf-8').splitlines():
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            if '=' in line:
+                key, val = line.split('=', 1)
+                key = key.strip()
+                val = val.strip().strip('"').strip("'")
+                os.environ.setdefault(key, val)
+    _load_env_fallback()
+
+# Read credentials from environment (populated by .env)
+SUPABASE_URL = os.getenv('SUPABASE_URL', '')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY', '')
+GENAI_API_KEY = os.getenv('GENAI_API_KEY', '')
 
 from app_modules.query_builder import build_search_query
 from app_modules.search_service import search_bytes, search_summaries
@@ -193,11 +220,20 @@ if "similar_bytes_results" not in st.session_state:
 
 def init_supabase_client():
     """Initialize and return Supabase client"""
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
+    url = os.getenv('SUPABASE_URL', SUPABASE_URL)
+    key = os.getenv('SUPABASE_KEY', SUPABASE_KEY)
+    if not url or not key:
+        st.error("Missing Supabase credentials. Please set SUPABASE_URL and SUPABASE_KEY in .env.")
+        return None
+    return create_client(url, key)
 
 def init_genai_client():
     """Initialize and return Google Genai client"""
-    return genai.Client(api_key=GENAI_API_KEY)
+    api_key = os.getenv('GENAI_API_KEY', GENAI_API_KEY)
+    if not api_key:
+        st.error("Missing GENAI_API_KEY in .env.")
+        return None
+    return genai.Client(api_key=api_key)
 
 @st.cache_data(ttl=3600)
 def fetch_questions():
