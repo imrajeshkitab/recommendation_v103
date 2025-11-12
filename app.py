@@ -152,11 +152,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Supabase configuration
-SUPABASE_URL = "https://kijxqpprmvywetklzhbg.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpanhxcHBybXZ5d2V0a2x6aGJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg4Njk4NjMsImV4cCI6MjA3NDQ0NTg2M30.d6eKlbz3s3KaqbMbxYceUBUFep3VehNZKEOe0ayPF2I"
 
-# Google Genai configuration
-GENAI_API_KEY = "AIzaSyCKgK59CFtxfmmQm-92p7mvxiX_qumgrb8"
 
 # Relevance scoring configuration
 # Toggle scoring/ranking, fallback score when missing data, and debug metrics rendering
