@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-900">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Our Recommendation Strategy</title>
+    <!-- 1. Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 2. Configure Tailwind for Inter font -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: 0, transform: 'translateY(20px)' },
+                            '100%': { opacity: 1, transform: 'translateY(0)' },
+                        },
+                        dotPulse: {
+                            '0%, 100%': { opacity: 0.5 },
+                            '50%': { opacity: 1 },
+                        }
+                    },
+                    animation: {
+                        fadeIn: 'fadeIn 0.5s ease-out forwards',
+                        dotPulse: 'dotPulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                },
+            },
+        }
+    </script>
+    
+    <!-- 3. Load Inter font from Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- 4. Custom styles for the app -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Style for the fade-in animation, triggered by JS */
+        .scene-content {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="h-full flex items-center justify-center text-gray-200 p-4 md:p-8">
+
+    <!-- Main application container -->
+    <div id="app" class="w-full max-w-4xl mx-auto bg-gray-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col" style="min-height: 600px;">
+        
+        <!-- Header -->
+        <header class="p-6 bg-gray-900/50 border-b border-gray-700">
+            <h1 id="scene-title" class="text-2xl md:text-3xl font-bold text-center text-white">
+                <!-- Title will be loaded here by JS -->
+            </h1>
+        </header>
+        
+        <!-- Main content area for scenes -->
+        <main id="scene-container" class="flex-grow p-6 md:p-10 text-center flex items-center justify-center">
+            <!-- Scene content will be loaded here by JS -->
+        </main>
+        
+        <!-- Navigation -->
+        <footer class="bg-gray-900/50 p-6 border-t border-gray-700">
+            <div class="flex items-center justify-between">
+                <!-- Previous Button -->
+                <button id="prev-btn" class="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+                    <!-- Heroicon: arrow-left -->
+                    <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                    </svg>
+                    Prev
+                </button>
+                
+                <!-- Progress Dots -->
+                <div id="progress-dots" class="flex gap-2">
+                    <!-- Dots will be loaded here by JS -->
+                </div>
+                
+                <!-- Next Button -->
+                <button id="next-btn" class="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+                    Next
+                    <!-- Heroicon: arrow-right -->
+                    <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                    </svg>
+                </button>
+            </div>
+        </footer>
+    </div>
+
+    <!-- 5. JavaScript Application Logic -->
+    <script type="module">
+        // --- SCENE DATA ---
+        // We define all our "slides" here as an array of objects.
+        const scenes = [
+            {
+                title: "How Our Recommendation System Works",
+                content: `
+                    <div class="max-w-xl mx-auto">
+                        <p class="text-xl md:text-2xl text-gray-300">
+                            Let's walk through the simple, smart way our app provides personalized recommendations from the very first moment you use it.
+                        </p>
+                    </div>
+                `
+            },
+            {
+                title: "Our Solution: The \"Smart Start\"",
+                content: `
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 text-left">
+                        <!-- Step 1 -->
+                        <div class="bg-gray-700 p-5 rounded-lg shadow-lg">
+                            <h3 class="flex items-center gap-2 text-lg font-semibold text-white mb-2">
+                                <!-- Heroicon: clipboard-document-list -->
+                                <svg class="w-6 h-6 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08H4.125A2.25 2.25 0 001.875 6.108v10.643a2.25 2.25 0 002.25 2.25h10.125q.375 0 .75-.04t.75-.115z" /></svg>
+                                1. You Tell Us Your Goals
+                            </h3>
+                            <p class="text-gray-300 text-sm">You answer a few key questions about your motivations, interests, and what you want to achieve.</p>
+                        </div>
+                        
+                        <!-- Step 2 -->
+                        <div class="bg-gray-700 p-5 rounded-lg shadow-lg">
+                            <h3 class="flex items-center gap-2 text-lg font-semibold text-white mb-2">
+                                <!-- Heroicon: user-circle -->
+                                <svg class="w-6 h-6 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                2. We Create Your Profile
+                            </h3>
+                            <p class="text-gray-300 text-sm">Our system creates a unique "Interest Profile" that represents the *meaning* behind your goals (e.g., "focused on growth").</p>
+                        </div>
+
+                        <!-- Step 3 -->
+                        <div class="bg-gray-700 p-5 rounded-lg shadow-lg">
+                            <h3 class="flex items-center gap-2 text-lg font-semibold text-white mb-2">
+                                <!-- Heroicon: check-badge -->
+                                <svg class="w-6 h-6 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                3. We Play Matchmaker
+                            </h3>
+                            <p class="text-gray-300 text-sm">We compare your profile to the "Ideal Audience Profile" for every piece of content and find the perfect matches for you.</p>
+                        </div>
+                    </div>
+                `
+            },
+            {
+                title: "We're in Good Company",
+                content: `
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+                        <div class="bg-gray-700 p-5 rounded-lg shadow-lg">
+                            <img src="https://placehold.co/100x40/f43f5e/white?text=NETFLIX&font=inter" alt="Netflix logo" class="h-10 mx-auto mb-3" onerror="this.src='https://placehold.co/100x40/f43f5e/white?text=NETFLIX&font=inter'">
+                            <p class="text-gray-300 text-sm">When you first join, they ask you to pick a few shows you love. This builds your initial profile to personalize your homepage.</p>
+                        </div>
+                        <div class="bg-gray-700 p-5 rounded-lg shadow-lg">
+                            <img src="https://placehold.co/100x40/1db954/white?text=SPOTIFY&font=inter" alt="Spotify logo" class="h-10 mx-auto mb-3" onerror="this.src='https://placehold.co/100x40/1db954/white?text=SPOTIFY&font=inter'">
+                            <p class="text-gray-300 text-sm">They ask for your favorite artists and topics. This immediately solves the "empty homepage" problem and gives you a great experience.</p>
+                        </div>
+                    </div>
+                `
+            },
+            {
+                title: "Pros & Cons of the \"Smart Start\"",
+                content: `
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left max-w-3xl mx-auto">
+                        <!-- Pros -->
+                        <div class="bg-green-900/30 border border-green-700 p-5 rounded-lg">
+                            <h3 class="text-xl font-semibold text-green-300 mb-3">The Pros (Why it's great)</h3>
+                            <ul class="list-disc list-inside space-y-2 text-green-200">
+                                <li><b>Personalized from Second One:</b> You get relevant recommendations immediately.</li>
+                                <li><b>Based on Your Goals:</b> Recommends what you *need*, not just what's popular.</li>
+                                <li><b>Transparent:</b> We can always explain *why* you were shown a recommendation.</li>
+                            </ul>
+                        </div>
+                        <!-- Cons -->
+                        <div class="bg-yellow-900/30 border border-yellow-700 p-5 rounded-lg">
+                            <h3 class="text-xl font-semibold text-yellow-300 mb-3">The Cons (Where we'll get better)</h3>
+                            <ul class="list-disc list-inside space-y-2 text-yellow-200">
+                                <li><b>Not a Mind-Reader:</b> Only knows what you told us in the questionnaire.</li>
+                                <li><b>It Doesn't Learn... Yet:</b> Your recommendations are a "snapshot" and don't change as you browse (yet!).</li>
+                            </ul>
+                        </div>
+                    </div>
+                `
+            },
+            {
+                title: "Our Future: How We're Evolving",
+                content: `
+                    <div class="flex flex-col md:flex-row justify-center gap-4 text-left">
+                        <!-- Phase 1 -->
+                        <div class="flex-1 p-4 bg-gray-700 rounded-lg border-l-4 border-indigo-500">
+                            <span class="text-xs font-bold uppercase text-indigo-400">Phase 1: (Current)</span>
+                            <h4 class="text-lg font-semibold text-white mt-1 mb-1">The Smart Start</h4>
+                            <p class="text-sm text-gray-300">Recommendations are 100% based on your questionnaire answers.</p>
+                        </div>
+                        
+                        <!-- Arrow -->
+                        <div class="flex items-center justify-center rotate-90 md:rotate-0">
+                            <svg class="w-6 h-6 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
+                        </div>
+
+                        <!-- Phase 2 -->
+                        <div class="flex-1 p-4 bg-gray-700 rounded-lg border-l-4 border-gray-500 opacity-70">
+                            <span class="text-xs font-bold uppercase text-gray-400">Phase 2: (Near Future)</span>
+                            <h4 class="text-lg font-semibold text-white mt-1 mb-1">The Hybrid Model</h4>
+                            <p class="text-sm text-gray-300">We'll blend your answers with your *behavior* (clicks, saves) to adapt.</p>
+                        </div>
+
+                        <!-- Arrow -->
+                        <div class="flex items-center justify-center rotate-90 md:rotate-0">
+                            <svg class="w-6 h-6 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
+                        </div>
+                        
+                        <!-- Phase 3 -->
+                        <div class="flex-1 p-4 bg-gray-700 rounded-lg border-l-4 border-gray-500 opacity-70">
+                            <span class="text-xs font-bold uppercase text-gray-400">Phase 3: (Long-Term)</span>
+                            <h4 class="text-lg font-semibold text-white mt-1 mb-1">The Community AI</h4>
+                            <p class="text-sm text-gray-300">"Users like you also loved..." This is where we help you discover new things.</p>
+                        </div>
+                    </div>
+                `
+            }
+        ];
+
+        // --- APPLICATION STATE ---
+        let currentSceneIndex = 0;
+
+        // --- DOM ELEMENTS ---
+        const titleElement = document.getElementById('scene-title');
+        const containerElement = document.getElementById('scene-container');
+        const nextButton = document.getElementById('next-btn');
+        const prevButton = document.getElementById('prev-btn');
+        const progressDotsContainer = document.getElementById('progress-dots');
+
+        // --- FUNCTIONS ---
+
+        /**
+         * Renders the current scene based on the currentSceneIndex
+         */
+        function renderScene() {
+            // Get the scene data
+            const scene = scenes[currentSceneIndex];
+            
+            // 1. Update Title
+            titleElement.innerText = scene.title;
+            
+            // 2. Update Content with animation
+            // We create a new div, add the content and classes, and then replace the old one.
+            // This ensures the animation re-triggers.
+            const newContentDiv = document.createElement('div');
+            newContentDiv.className = 'scene-content w-full'; // Add 'w-full'
+            newContentDiv.innerHTML = scene.content;
+            
+            // Replace the old content
+            containerElement.innerHTML = ''; // Clear old content
+            containerElement.appendChild(newContentDiv); // Add new content
+            
+            // 3. Update Progress Dots
+            updateProgressDots();
+            
+            // 4. Update Button States
+            prevButton.disabled = (currentSceneIndex === 0);
+            nextButton.disabled = (currentSceneIndex === scenes.length - 1);
+        }
+
+        /**
+         * Generates and updates the progress dots
+         */
+        function updateProgressDots() {
+            progressDotsContainer.innerHTML = ''; // Clear existing dots
+            for (let i = 0; i < scenes.length; i++) {
+                const dot = document.createElement('div');
+                dot.classList.add('w-2.5', 'h-2.5', 'rounded-full', 'transition-all');
+                if (i === currentSceneIndex) {
+                    dot.classList.add('bg-indigo-400', 'w-4'); // Active dot is wider
+                } else {
+                    dot.classList.add('bg-gray-600', 'hover:bg-gray-500');
+                }
+                progressDotsContainer.appendChild(dot);
+            }
+        }
+
+        /**
+         * Moves to the next scene
+         */
+        function goToNextScene() {
+            if (currentSceneIndex < scenes.length - 1) {
+                currentSceneIndex++;
+                renderScene();
+            }
+        }
+
+        /**
+         * Moves to the previous scene
+         */
+        function goToPrevScene() {
+            if (currentSceneIndex > 0) {
+                currentSceneIndex--;
+                renderScene();
+            }
+        }
+
+        // --- EVENT LISTENERS ---
+        nextButton.addEventListener('click', goToNextScene);
+        prevButton.addEventListener('click', goToPrevScene);
+
+        // --- INITIALIZATION ---
+        // Load the first scene on page load
+        renderScene();
+
+    </script>
+</body>
+</html>

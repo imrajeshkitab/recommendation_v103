@@ -936,14 +936,17 @@ def process_responses():
     
     # Combine all response texts into a search query
     combined_query = " ".join(query_parts)
-    
+
     if not combined_query.strip():
         st.error("Please provide at least one answer to get recommendations.")
         st.session_state.app_state = "questions"
         st.session_state.question_index = 0
         st.rerun()
         return
-    
+
+    # Log the combined user profile query text to the terminal
+    logger.info("User profile query text: %s", combined_query)
+
     # Show loading state with progress steps
     status_placeholder = st.empty()
     status_placeholder.info("📝 Combining your responses...")
